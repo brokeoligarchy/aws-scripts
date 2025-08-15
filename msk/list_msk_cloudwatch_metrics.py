@@ -49,7 +49,17 @@ def get_cluster_metrics(cluster_arn, cluster_name, start_time, end_time):
         cloudwatch = boto3.client('cloudwatch')
         
         # Extract cluster name from ARN for metric dimensions
-        cluster_name_metric = cluster_name.replace('-', '_')
+        # Handle different cluster name formats
+        if cluster_name == 'Specified Cluster':
+            # For specific cluster ARN, we need to extract the actual name
+            # ARN format: arn:aws:kafka:region:account:cluster/cluster-name/uuid
+            try:
+                cluster_name_metric = cluster_arn.split('/')[-2].replace('-', '_')
+            except (IndexError, AttributeError):
+                logger.warning(f"Could not extract cluster name from ARN: {cluster_arn}")
+                cluster_name_metric = cluster_name.replace('-', '_')
+        else:
+            cluster_name_metric = cluster_name.replace('-', '_')
         
         # Define metrics to retrieve
         metrics_to_get = [
@@ -378,11 +388,25 @@ def main():
             return
         
         for cluster in clusters:
-            cluster_arn = cluster['ClusterArn']
-            cluster_name = cluster['ClusterName']
+            # Handle both cases: specific cluster ARN and clusters from AWS API
+            if isinstance(cluster, dict):
+                cluster_arn = cluster.get('ClusterArn')
+                cluster_name = cluster.get('ClusterName')
+                
+                if not cluster_arn or not cluster_name:
+                    logger.warning(f"Invalid cluster data: {cluster}")
+                    continue
+            else:
+                logger.warning(f"Unexpected cluster data type: {type(cluster)}")
+                continue
             
             print(f"\nAnalyzing cluster: {cluster_name}")
             print(f"ARN: {cluster_arn}")
+            
+            # Debug: Print cluster data structure
+            logger.debug(f"Cluster data: {cluster}")
+            logger.debug(f"Cluster ARN: {cluster_arn}")
+            logger.debug(f"Cluster name: {cluster_name}")
             
             # Get cluster metrics
             cluster_metrics = get_cluster_metrics(cluster_arn, cluster_name, start_time, end_time)
@@ -408,6 +432,8 @@ def main():
         print("You can configure them using: aws configure")
     except Exception as e:
         logger.error(f"Unexpected error: {e}")
+        import traceback
+        logger.error(f"Full traceback: {traceback.format_exc()}")
 
 
 if __name__ == "__main__":
