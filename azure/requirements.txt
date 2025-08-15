@@ -1,0 +1,2 @@
+# No external Python dependencies required
+# This script uses only standard library modules and Azure CLI
