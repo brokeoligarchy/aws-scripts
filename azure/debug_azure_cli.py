@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Debug script to troubleshoot Azure CLI installation and PATH issues.
+Debug script to diagnose Azure CLI installation issues on Windows.
 """
 
 import subprocess
@@ -8,193 +8,160 @@ import os
 import sys
 import platform
 
-def check_azure_cli_installation():
-    """Check Azure CLI installation and provide detailed diagnostics."""
-    
-    print("Azure CLI Installation Diagnostics")
-    print("=" * 50)
-    
-    # Check system information
-    print(f"Operating System: {platform.system()} {platform.release()}")
-    print(f"Python Version: {sys.version}")
-    print(f"Python Executable: {sys.executable}")
+def check_system_info():
+    """Print system information."""
+    print("=== SYSTEM INFORMATION ===")
+    print(f"Platform: {platform.platform()}")
+    print(f"Python version: {sys.version}")
+    print(f"Python executable: {sys.executable}")
+    print(f"Current working directory: {os.getcwd()}")
     print()
+
+def check_path():
+    """Check PATH environment variable."""
+    print("=== PATH ENVIRONMENT VARIABLE ===")
+    path = os.environ.get('PATH', '')
+    path_dirs = path.split(os.pathsep)
     
-    # Check PATH environment variable
-    print("PATH Environment Variable:")
-    path_dirs = os.environ.get('PATH', '').split(os.pathsep)
-    for i, path_dir in enumerate(path_dirs):
-        print(f"  {i+1:2d}. {path_dir}")
+    print(f"PATH contains {len(path_dirs)} directories:")
+    for i, directory in enumerate(path_dirs, 1):
+        print(f"  {i:2d}. {directory}")
     print()
+
+def check_azure_cli_commands():
+    """Check different ways to find Azure CLI."""
+    print("=== AZURE CLI COMMAND CHECK ===")
     
-    # Try different ways to find Azure CLI
-    az_commands = ['az', 'az.cmd', 'azure-cli']
-    az_found = False
+    # Common Azure CLI command variations
+    az_commands = [
+        'az',
+        'az.cmd', 
+        'az.exe',
+        r'C:\Program Files (x86)\Microsoft SDKs\Azure\CLI2\wbin\az.cmd',
+        r'C:\Program Files\Microsoft SDKs\Azure\CLI2\wbin\az.cmd',
+        r'C:\Users\%USERNAME%\AppData\Local\Programs\Microsoft Azure CLI\az.cmd'
+    ]
     
-    print("Checking for Azure CLI executable:")
     for cmd in az_commands:
+        print(f"Testing command: {cmd}")
+        
+        # Method 1: Direct subprocess call
         try:
-            # Check if command exists in PATH
             result = subprocess.run(
                 [cmd, '--version'],
                 capture_output=True,
                 text=True,
                 timeout=10
             )
-            
             if result.returncode == 0:
-                print(f"✅ Found: {cmd}")
-                print(f"   Version: {result.stdout.strip()}")
-                az_found = True
-                break
+                print(f"  ✓ SUCCESS: {cmd} works with subprocess.run([cmd, '--version'])")
+                print(f"    Output: {result.stdout.strip()}")
             else:
-                print(f"❌ {cmd} returned error code: {result.returncode}")
-                print(f"   Error: {result.stderr.strip()}")
-                
+                print(f"  ✗ FAILED: {cmd} returned code {result.returncode}")
+                print(f"    Error: {result.stderr.strip()}")
         except FileNotFoundError:
-            print(f"❌ {cmd} not found in PATH")
+            print(f"  ✗ NOT FOUND: {cmd}")
         except subprocess.TimeoutExpired:
-            print(f"⏰ {cmd} command timed out")
+            print(f"  ✗ TIMEOUT: {cmd}")
         except Exception as e:
-            print(f"❌ Error running {cmd}: {e}")
-    
-    print()
-    
-    # Check common installation locations
-    print("Checking common Azure CLI installation locations:")
-    common_paths = [
-        # Windows
-        r"C:\Program Files (x86)\Microsoft SDKs\Azure\CLI2\wbin",
-        r"C:\Program Files\Microsoft SDKs\Azure\CLI2\wbin",
-        r"C:\Users\{}\AppData\Local\Programs\Azure CLI\bin".format(os.getenv('USERNAME', '')),
+            print(f"  ✗ ERROR: {cmd} - {e}")
         
-        # macOS
-        "/usr/local/bin",
-        "/opt/homebrew/bin",
-        "/usr/bin",
-        
-        # Linux
-        "/usr/local/bin",
-        "/usr/bin",
-        "/opt/azure-cli/bin",
-    ]
-    
-    for path in common_paths:
-        az_path = os.path.join(path, 'az')
-        az_cmd_path = os.path.join(path, 'az.cmd')
-        
-        if os.path.exists(az_path):
-            print(f"✅ Found az at: {az_path}")
-            az_found = True
-        elif os.path.exists(az_cmd_path):
-            print(f"✅ Found az.cmd at: {az_cmd_path}")
-            az_found = True
-        else:
-            print(f"❌ Not found: {path}")
-    
-    print()
-    
-    # Provide installation instructions
-    if not az_found:
-        print("Azure CLI not found. Installation instructions:")
-        print()
-        
-        system = platform.system().lower()
-        if system == "windows":
-            print("Windows Installation:")
-            print("1. Download from: https://aka.ms/installazurecliwindows")
-            print("2. Or use winget: winget install Microsoft.AzureCLI")
-            print("3. Or use Chocolatey: choco install azure-cli")
-            print("4. Restart your terminal after installation")
-            
-        elif system == "darwin":  # macOS
-            print("macOS Installation:")
-            print("1. Using Homebrew: brew install azure-cli")
-            print("2. Or download from: https://aka.ms/installazureclimacos")
-            print("3. Restart your terminal after installation")
-            
-        elif system == "linux":
-            print("Linux Installation:")
-            print("1. Ubuntu/Debian: curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash")
-            print("2. RHEL/CentOS: sudo yum install azure-cli")
-            print("3. Or download from: https://aka.ms/InstallAzureCLILinux")
-            print("4. Restart your terminal after installation")
-    else:
-        print("✅ Azure CLI is installed and accessible!")
-        print()
-        print("If you're still getting errors, try:")
-        print("1. Restart your terminal/command prompt")
-        print("2. Check if you need to log in: az login")
-        print("3. Verify your account: az account show")
-
-def test_azure_cli_commands():
-    """Test various Azure CLI commands."""
-    
-    print("\n" + "=" * 50)
-    print("Testing Azure CLI Commands")
-    print("=" * 50)
-    
-    commands_to_test = [
-        ['az', '--version'],
-        ['az', 'account', 'show'],
-        ['az', 'account', 'list', '--output', 'table']
-    ]
-    
-    for cmd in commands_to_test:
-        print(f"\nTesting: {' '.join(cmd)}")
+        # Method 2: Shell=True approach
         try:
             result = subprocess.run(
-                cmd,
+                f'{cmd} --version',
+                shell=True,
                 capture_output=True,
                 text=True,
-                timeout=30
+                timeout=10
             )
-            
             if result.returncode == 0:
-                print("✅ Success!")
-                if result.stdout.strip():
-                    print(f"Output: {result.stdout.strip()[:200]}...")
+                print(f"  ✓ SUCCESS: {cmd} works with shell=True")
+                print(f"    Output: {result.stdout.strip()}")
             else:
-                print(f"❌ Failed with code: {result.returncode}")
-                if result.stderr.strip():
-                    print(f"Error: {result.stderr.strip()}")
-                    
-        except FileNotFoundError:
-            print("❌ Command not found")
+                print(f"  ✗ FAILED: {cmd} with shell=True returned code {result.returncode}")
+                print(f"    Error: {result.stderr.strip()}")
         except subprocess.TimeoutExpired:
-            print("⏰ Command timed out")
+            print(f"  ✗ TIMEOUT: {cmd} with shell=True")
         except Exception as e:
-            print(f"❌ Error: {e}")
+            print(f"  ✗ ERROR: {cmd} with shell=True - {e}")
+        
+        print()
 
-def provide_solutions():
-    """Provide common solutions for Azure CLI issues."""
+def check_where_az():
+    """Use 'where' command to find az."""
+    print("=== USING 'WHERE' COMMAND ===")
     
-    print("\n" + "=" * 50)
-    print("Common Solutions")
+    try:
+        # On Windows, use 'where' to find az
+        result = subprocess.run(
+            'where az',
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        
+        if result.returncode == 0:
+            print("Found az using 'where az':")
+            for line in result.stdout.strip().split('\n'):
+                if line.strip():
+                    print(f"  {line.strip()}")
+        else:
+            print("'where az' command failed")
+            print(f"Error: {result.stderr.strip()}")
+    except Exception as e:
+        print(f"Error running 'where az': {e}")
+    
+    print()
+
+def check_azure_login():
+    """Check if Azure login works."""
+    print("=== AZURE LOGIN CHECK ===")
+    
+    # Try different methods
+    methods = [
+        ("subprocess.run(['az', 'account', 'show'])", lambda: subprocess.run(['az', 'account', 'show'], capture_output=True, text=True)),
+        ("subprocess.run('az account show', shell=True)", lambda: subprocess.run('az account show', shell=True, capture_output=True, text=True)),
+        ("subprocess.run(['az.cmd', 'account', 'show'])", lambda: subprocess.run(['az.cmd', 'account', 'show'], capture_output=True, text=True)),
+        ("subprocess.run('az.cmd account show', shell=True)", lambda: subprocess.run('az.cmd account show', shell=True, capture_output=True, text=True))
+    ]
+    
+    for method_name, method_func in methods:
+        print(f"Testing: {method_name}")
+        try:
+            result = method_func()
+            if result.returncode == 0:
+                print(f"  ✓ SUCCESS: {method_name}")
+                # Don't print the full output as it might contain sensitive info
+                print(f"    Return code: {result.returncode}")
+            else:
+                print(f"  ✗ FAILED: {method_name}")
+                print(f"    Return code: {result.returncode}")
+                print(f"    Error: {result.stderr.strip()}")
+        except Exception as e:
+            print(f"  ✗ ERROR: {method_name} - {e}")
+        print()
+
+def main():
+    """Main debug function."""
+    print("Azure CLI Debug Script for Windows")
     print("=" * 50)
+    print()
     
-    print("1. PATH Issues:")
-    print("   - Restart your terminal/command prompt")
-    print("   - Add Azure CLI to your PATH manually")
-    print("   - Check if Azure CLI is in your PATH: echo $PATH (Linux/macOS) or echo %PATH% (Windows)")
+    check_system_info()
+    check_path()
+    check_where_az()
+    check_azure_cli_commands()
+    check_azure_login()
     
-    print("\n2. Installation Issues:")
-    print("   - Uninstall and reinstall Azure CLI")
-    print("   - Use the official installer from Microsoft")
-    print("   - Check for conflicting installations")
-    
-    print("\n3. Permission Issues:")
-    print("   - Run as administrator (Windows)")
-    print("   - Use sudo (Linux/macOS)")
-    print("   - Check file permissions")
-    
-    print("\n4. Authentication Issues:")
-    print("   - Run: az login")
-    print("   - Check if you're logged in: az account show")
-    print("   - Clear cached credentials: az account clear")
+    print("=== RECOMMENDATIONS ===")
+    print("1. If 'where az' found az.cmd, the script should use 'az.cmd' instead of 'az'")
+    print("2. If shell=True works but direct subprocess doesn't, use shell=True approach")
+    print("3. Make sure Azure CLI is properly installed and in PATH")
+    print("4. Try restarting PowerShell after Azure CLI installation")
+    print("5. Check if running as administrator helps")
 
 if __name__ == "__main__":
-    check_azure_cli_installation()
-    test_azure_cli_commands()
-    provide_solutions()
+    main()
 

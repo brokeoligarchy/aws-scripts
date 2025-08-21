@@ -26,49 +26,58 @@ def run_azure_cli_command(command):
     Returns:
         dict: JSON response from Azure CLI
     """
-    # Try different Azure CLI commands
-    az_commands = ['az', 'az.cmd']
+    import platform
     
-    for az_cmd in az_commands:
+    # Detect if we're on Windows
+    is_windows = platform.system().lower() == 'windows'
+    
+    # Try different approaches for Windows vs other platforms
+    if is_windows:
+        # On Windows, try different methods
+        methods = [
+            # Method 1: Use az.cmd with shell=True
+            lambda cmd: subprocess.run(f"az.cmd {cmd.replace('az ', '')}", shell=True, capture_output=True, text=True, timeout=60),
+            # Method 2: Use az with shell=True
+            lambda cmd: subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=60),
+            # Method 3: Use az.cmd without shell
+            lambda cmd: subprocess.run(f"az.cmd {cmd.replace('az ', '')}".split(), capture_output=True, text=True, timeout=60),
+            # Method 4: Use az without shell
+            lambda cmd: subprocess.run(cmd.split(), capture_output=True, text=True, timeout=60)
+        ]
+    else:
+        # On non-Windows platforms
+        methods = [
+            lambda cmd: subprocess.run(cmd.split(), capture_output=True, text=True, timeout=60),
+            lambda cmd: subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=60)
+        ]
+    
+    for i, method in enumerate(methods, 1):
         try:
-            # Replace 'az' with the current command
-            if command.startswith('az '):
-                actual_command = command.replace('az ', f'{az_cmd} ', 1)
+            logger.debug(f"Trying method {i} with command: {command}")
+            
+            result = method(command)
+            
+            if result.returncode == 0 and result.stdout.strip():
+                try:
+                    return json.loads(result.stdout)
+                except json.JSONDecodeError as e:
+                    logger.error(f"Failed to parse JSON output: {e}")
+                    logger.error(f"Raw output: {result.stdout}")
+                    continue
             else:
-                actual_command = f"{az_cmd} {command}"
-            
-            logger.debug(f"Running command: {actual_command}")
-            
-            result = subprocess.run(
-                actual_command.split(),
-                capture_output=True,
-                text=True,
-                check=True,
-                timeout=60
-            )
-            
-            if result.stdout.strip():
-                return json.loads(result.stdout)
-            else:
-                logger.warning(f"Command returned empty output: {actual_command}")
+                logger.debug(f"Method {i} failed - return code: {result.returncode}")
+                if result.stderr.strip():
+                    logger.debug(f"Error output: {result.stderr}")
                 continue
                 
-        except subprocess.CalledProcessError as e:
-            logger.error(f"Azure CLI command failed: {e}")
-            logger.error(f"Error output: {e.stderr}")
-            continue
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse JSON output: {e}")
-            logger.error(f"Raw output: {result.stdout if 'result' in locals() else 'No output'}")
-            continue
         except subprocess.TimeoutExpired:
-            logger.error(f"Azure CLI command timed out: {actual_command}")
+            logger.error(f"Azure CLI command timed out (method {i}): {command}")
             continue
         except FileNotFoundError:
-            logger.debug(f"Azure CLI command not found: {az_cmd}")
+            logger.debug(f"Azure CLI command not found (method {i}): {command}")
             continue
         except Exception as e:
-            logger.error(f"Unexpected error running Azure CLI command: {e}")
+            logger.error(f"Unexpected error running Azure CLI command (method {i}): {e}")
             continue
     
     return None
@@ -81,27 +90,40 @@ def check_azure_cli_installed():
     Returns:
         bool: True if Azure CLI is available, False otherwise
     """
-    # Try different possible Azure CLI commands
-    az_commands = ['az', 'az.cmd']
+    import platform
     
-    for cmd in az_commands:
+    # Detect if we're on Windows
+    is_windows = platform.system().lower() == 'windows'
+    
+    if is_windows:
+        # On Windows, try different methods
+        methods = [
+            lambda: subprocess.run('az.cmd --version', shell=True, capture_output=True, text=True, timeout=10),
+            lambda: subprocess.run('az --version', shell=True, capture_output=True, text=True, timeout=10),
+            lambda: subprocess.run(['az.cmd', '--version'], capture_output=True, text=True, timeout=10),
+            lambda: subprocess.run(['az', '--version'], capture_output=True, text=True, timeout=10)
+        ]
+    else:
+        # On non-Windows platforms
+        methods = [
+            lambda: subprocess.run(['az', '--version'], capture_output=True, text=True, timeout=10),
+            lambda: subprocess.run('az --version', shell=True, capture_output=True, text=True, timeout=10)
+        ]
+    
+    for i, method in enumerate(methods, 1):
         try:
-            result = subprocess.run(
-                [cmd, '--version'],
-                capture_output=True,
-                text=True,
-                timeout=10
-            )
+            result = method()
             if result.returncode == 0:
-                logger.info(f"Found Azure CLI: {cmd}")
+                logger.info(f"Found Azure CLI using method {i}")
                 return True
         except FileNotFoundError:
+            logger.debug(f"Method {i}: Azure CLI not found")
             continue
         except subprocess.TimeoutExpired:
-            logger.warning(f"Azure CLI command timed out: {cmd}")
+            logger.warning(f"Method {i}: Azure CLI command timed out")
             continue
         except Exception as e:
-            logger.debug(f"Error checking {cmd}: {e}")
+            logger.debug(f"Method {i}: Error checking Azure CLI - {e}")
             continue
     
     return False
@@ -114,15 +136,35 @@ def check_azure_login():
     Returns:
         bool: True if logged in, False otherwise
     """
-    try:
-        result = subprocess.run(
-            ['az', 'account', 'show'],
-            capture_output=True,
-            text=True
-        )
-        return result.returncode == 0
-    except Exception:
-        return False
+    import platform
+    
+    # Detect if we're on Windows
+    is_windows = platform.system().lower() == 'windows'
+    
+    if is_windows:
+        # On Windows, try different methods
+        methods = [
+            lambda: subprocess.run('az.cmd account show', shell=True, capture_output=True, text=True),
+            lambda: subprocess.run('az account show', shell=True, capture_output=True, text=True),
+            lambda: subprocess.run(['az.cmd', 'account', 'show'], capture_output=True, text=True),
+            lambda: subprocess.run(['az', 'account', 'show'], capture_output=True, text=True)
+        ]
+    else:
+        # On non-Windows platforms
+        methods = [
+            lambda: subprocess.run(['az', 'account', 'show'], capture_output=True, text=True),
+            lambda: subprocess.run('az account show', shell=True, capture_output=True, text=True)
+        ]
+    
+    for method in methods:
+        try:
+            result = method()
+            if result.returncode == 0:
+                return True
+        except Exception:
+            continue
+    
+    return False
 
 
 def get_subscriptions():
