@@ -26,25 +26,52 @@ def run_azure_cli_command(command):
     Returns:
         dict: JSON response from Azure CLI
     """
-    try:
-        result = subprocess.run(
-            command.split(),
-            capture_output=True,
-            text=True,
-            check=True
-        )
-        return json.loads(result.stdout)
-    except subprocess.CalledProcessError as e:
-        logger.error(f"Azure CLI command failed: {e}")
-        logger.error(f"Error output: {e.stderr}")
-        return None
-    except json.JSONDecodeError as e:
-        logger.error(f"Failed to parse JSON output: {e}")
-        logger.error(f"Raw output: {result.stdout if 'result' in locals() else 'No output'}")
-        return None
-    except Exception as e:
-        logger.error(f"Unexpected error running Azure CLI command: {e}")
-        return None
+    # Try different Azure CLI commands
+    az_commands = ['az', 'az.cmd']
+    
+    for az_cmd in az_commands:
+        try:
+            # Replace 'az' with the current command
+            if command.startswith('az '):
+                actual_command = command.replace('az ', f'{az_cmd} ', 1)
+            else:
+                actual_command = f"{az_cmd} {command}"
+            
+            logger.debug(f"Running command: {actual_command}")
+            
+            result = subprocess.run(
+                actual_command.split(),
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=60
+            )
+            
+            if result.stdout.strip():
+                return json.loads(result.stdout)
+            else:
+                logger.warning(f"Command returned empty output: {actual_command}")
+                continue
+                
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Azure CLI command failed: {e}")
+            logger.error(f"Error output: {e.stderr}")
+            continue
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse JSON output: {e}")
+            logger.error(f"Raw output: {result.stdout if 'result' in locals() else 'No output'}")
+            continue
+        except subprocess.TimeoutExpired:
+            logger.error(f"Azure CLI command timed out: {actual_command}")
+            continue
+        except FileNotFoundError:
+            logger.debug(f"Azure CLI command not found: {az_cmd}")
+            continue
+        except Exception as e:
+            logger.error(f"Unexpected error running Azure CLI command: {e}")
+            continue
+    
+    return None
 
 
 def check_azure_cli_installed():
@@ -54,18 +81,30 @@ def check_azure_cli_installed():
     Returns:
         bool: True if Azure CLI is available, False otherwise
     """
-    try:
-        result = subprocess.run(
-            ['az', '--version'],
-            capture_output=True,
-            text=True
-        )
-        if result.returncode == 0:
-            return True
-        else:
-            return False
-    except FileNotFoundError:
-        return False
+    # Try different possible Azure CLI commands
+    az_commands = ['az', 'az.cmd']
+    
+    for cmd in az_commands:
+        try:
+            result = subprocess.run(
+                [cmd, '--version'],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            if result.returncode == 0:
+                logger.info(f"Found Azure CLI: {cmd}")
+                return True
+        except FileNotFoundError:
+            continue
+        except subprocess.TimeoutExpired:
+            logger.warning(f"Azure CLI command timed out: {cmd}")
+            continue
+        except Exception as e:
+            logger.debug(f"Error checking {cmd}: {e}")
+            continue
+    
+    return False
 
 
 def check_azure_login():
@@ -514,7 +553,15 @@ def main():
     # Check if Azure CLI is installed
     if not check_azure_cli_installed():
         print("Error: Azure CLI is not installed or not accessible.")
-        print("Please install Azure CLI from: https://docs.microsoft.com/en-us/cli/azure/install-azure-cli")
+        print("\nTroubleshooting steps:")
+        print("1. Run the debug script: python debug_azure_cli.py")
+        print("2. Make sure Azure CLI is installed and in your PATH")
+        print("3. Try restarting your terminal/command prompt")
+        print("4. Check installation at: https://docs.microsoft.com/en-us/cli/azure/install-azure-cli")
+        print("\nCommon solutions:")
+        print("- Windows: Restart terminal after installation")
+        print("- macOS: Check if Homebrew path is in your shell profile")
+        print("- Linux: Make sure /usr/local/bin is in your PATH")
         sys.exit(1)
     
     # Check if user is logged in
